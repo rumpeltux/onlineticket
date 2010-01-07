@@ -138,8 +138,39 @@ class OT_0080BL(DataBlock):
 		('data', 0, None, read_sblocks)
 	     ]
 
+class OT_U_TLAY(DataBlock):
+    def read_fields(self, res):
+	fields = [
+		    ('line', 2, int),
+		    ('column', 2, int),
+		    ('height', 2, int),
+		    ('width', 2, int),
+		    ('formating', 1, {
+			'1': 'bold',
+			'2': 'italic', 
+			'3': 'bold & italic',
+			'4': 'small font (the "132-font" in RCT-2)',
+			'5': 'small + bold',
+			'6': 'small + italic',
+			'7': 'small + bold + italic'}),
+		    ('text_length', 4, int),
+		    ('text', lambda self, res: res['text_length'])
+		 ]
+	ret = []
+	for i in range(res['field_count']):
+	    ret.append(self.dict_read(fields))
+	
+	return ret
+    
+    fields = [
+		('standard', 4),
+		('field_count', 4, int),
+		('fields', 0, None, read_fields)
+	     ]
+
 def read_block(data, offset):
     block_types = {'U_HEAD': OT_U_HEAD,
+		   'U_TLAY': OT_U_TLAY,
 		   '0080ID': OT_0080ID,
 		   '0080BL': OT_0080BL}
     return block_types[data[offset:offset+6]](data, offset)
