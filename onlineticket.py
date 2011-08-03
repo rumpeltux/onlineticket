@@ -110,7 +110,7 @@ class OT_0080BL(DataBlock):
 	    l   = int(self.read(4))
 	    dat = self.read(l)
 	    
-	    typ, mod = typen.get(typ, (typ,))
+	    typ, mod = typen.get(typ, (typ,ident))
 	    dat = mod.get(dat, dat) if type(mod) == dict else mod(dat)
 	    
 	    ret[typ] = dat
