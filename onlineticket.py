@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
-# Copyright by Hagen Fritsch, 2009
+# Copyright by Hagen Fritsch, 2009-2012
 
 import zlib
 import datetime
@@ -14,7 +14,11 @@ str_func = lambda v: {dict: dict_str, list: list_str}.get(type(v), str if isinst
 date_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y")
 datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
 
-class DataBlock:
+class DataBlock(object):
+    """
+    A DataBlock with a standard-header. The base for custom implementations.
+    Also provides features for easy definition of custom fields.
+    """
     generic = [
         ('head', 6),
         ('version', 2, int),
@@ -45,12 +49,18 @@ class DataBlock:
                 l = l(self, res)
             dat = self.read(l)
             if len(val) > 2 and val[2] is not None:
-                dat = val[2].get(dat) if type(val[2]) == dict else val[2](dat)
+                dat = val[2].get(dat, dat) if type(val[2]) == dict else val[2](dat)
             res[key] = dat
             if len(val) > 3:
                 dat = val[3](self, res)
             res[key] = dat
         return res
+
+class GenericBlock(DataBlock):
+    """A DataBlock whose content is unknown."""
+    def __init__(self, *args, **kwargs):
+        super(GenericBlock, self).__init__(*args,**kwargs)
+        self.data['unknown_content'] = self.read(self.header['length'] - 12)
 
 class OT_U_HEAD(DataBlock):
     fields = [
@@ -66,14 +76,20 @@ class OT_U_HEAD(DataBlock):
                 ('language_2', 2)
              ]
 
+
+class OT_0080VU(GenericBlock):
+    """Appearing on some newer DB tickets. Content yet unknown."""
+    pass
+
 class OT_0080ID(DataBlock):
     fields = [
-                ('ausweis_typ', 2, {'01': 'CC', '04': 'BC', '07': 'EC'}),
+                ('ausweis_typ', 2, {
+                    '01': 'CC', '04': 'BC', '07': 'EC', '09': 'Personalausweis',
+                    '11': 'Bonus.card business'}),
                 ('ziffer_ausweis', 4)
              ]
 
 class OT_0080BL(DataBlock):
-        
     def read_sblocks(self, res):
         
         def passagier_parser(x):
@@ -99,7 +115,8 @@ class OT_0080BL(DataBlock):
             '021': ('VIA',ident),
             '023': ('Personenname',ident),
             '026': ('Preisart', {'12': 'Normalpreis', '13': 'Sparpreis', '3': 'Rail&Fly'}),
-            '027': ('TBD: CC-#/Ausweis-ID',ident)
+            '027': ('CC-#/Ausweis-ID',ident),
+            '028': ('Vorname, Name', lambda x: x.split("#")),
                 }
                 
         ret = {}
@@ -132,6 +149,11 @@ class OT_0080BL(DataBlock):
     
     fields = [
                 ('TBD0', 2),
+                # '00' bei Schönem WE-Ticket / Ländertickets / Quer-Durchs-Land
+                # '02' bei Normalpreis Produktklasse C/B, aber auch Ausnahmen
+                # '03' bei normalem IC/EC/ICE Ticket
+                # '04' Hinfahrt A, Rückfahrt B; Rail&Fly ABC; Veranstaltungsticket; auch Ausnahmen
+                # '05' bei Facebook-Ticket
                 ('auftrag_count', 1, int),
                 ('blocks', 0, None, read_auftraege),
                 ('data_count', 2, int),
@@ -146,6 +168,7 @@ class OT_U_TLAY(DataBlock):
                     ('height', 2, int),
                     ('width', 2, int),
                     ('formating', 1, {
+                        '0': 'default',
                         '1': 'bold',
                         '2': 'italic', 
                         '3': 'bold & italic',
@@ -168,24 +191,6 @@ class OT_U_TLAY(DataBlock):
                 ('fields', 0, None, read_fields)
              ]
 
-def read_block(data, offset):
-    block_types = {'U_HEAD': OT_U_HEAD,
-                   'U_TLAY': OT_U_TLAY,
-                   '0080ID': OT_0080ID,
-                   '0080BL': OT_0080BL}
-    return block_types[data[offset:offset+6]](data, offset)
-
-readot = lambda x: ''.join([chr(int(i,16)) for i in x.split(" ")])
-
-def read_blocks(data, read_func):
-    offset = 0
-    ret = []
-    while offset != len(data):
-        block = read_func(data, offset)
-        offset = block.offset
-        ret.append(block)
-    return ret
-
 class OT(DataBlock):
     generic = [
         ('header', 3),
@@ -202,8 +207,74 @@ class OT(DataBlock):
             lambda self, res: read_blocks(zlib.decompress(self.read(res['data_length'])), read_block))
         ]
 
+def read_block(data, offset):
+    block_types = {'U_HEAD': OT_U_HEAD,
+                   'U_TLAY': OT_U_TLAY,
+                   '0080ID': OT_0080ID,
+                   '0080BL': OT_0080BL,
+                   '0080VU': OT_0080VU}
+    block_type = data[offset:offset+6]
+    return block_types.get(block_type, GenericBlock)(data, offset)
+
+readot = lambda x: ''.join([chr(int(i,16)) for i in x.strip().split(" ")])
+
+def read_blocks(data, read_func):
+    offset = 0
+    ret = []
+    while offset != len(data):
+        block = read_func(data, offset)
+        offset = block.offset
+        ret.append(block)
+    return ret
+
+def fix_zxing_(data):
+    """
+    ZXing parser seems to return weird results.
+    See http://code.google.com/p/zxing/issues/detail?id=1260#c4 from which
+    the fix here is derived.
+    """
+    out = data[:]
+    out_counter = 0
+    reducer = 0
+    for i in xrange(len(data)):
+        out[out_counter] = data[i] + reducer
+        if data[i] == 0xc3:
+            reducer = 0x40
+        elif data[i] == 0xc2:
+            reducer = 0
+        else:
+            reducer = 0
+            out_counter += 1
+    return out[:out_counter]
+
+def fix_zxing(data):
+    return ''.join(map(chr, fix_zxing_(map(ord, data))))
+           
 stb=lambda x: ' '.join([bin(ord(i)) for i in x])
 
 if __name__ == '__main__':
-    ots = [OT(readot(i)) for i in open("tickets")]
-    print list_str(ots) #[i for i in ots])
+    import sys
+    if len(sys.argv) < 2:
+        print 'Usage: %s [ticket_files]' % sys.argv[0]
+    ots = {}
+    for ticket in sys.argv[1:]:
+        try:
+            tickets = [readot(i) for i in open(ticket)]
+        except:
+            tickets = [open(ticket).read()]
+        for ot in tickets:
+            try:
+                ots.setdefault(ticket, []).append(OT(ot))
+            except Exception, e:
+                try:
+                    ots.setdefault(ticket, []).append(OT(fix_zxing(ot)))
+                except Exception, f:
+                    sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
+                        (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
+    print dict_str(ots)
+
+    # Some more sample functionality:
+    # 1. Sort by date
+    #tickets = reduce(list.__add__, ots.values())
+    #tickets.sort(lambda a, b: cmp(a.data['ticket'][0].data['creation_date'], b.data['ticket'][0].data['creation_date']))
+    #print list_str(tickets)
