@@ -268,6 +268,8 @@ class OT_1180AI(DataBlock):
     ]
 
 class OT_U_TLAY(DataBlock):
+    CSI = '\x1b[' # Escape sequence
+
     def read_fields(self, res):
         fields = [
                     ('line', 2, int),
@@ -292,6 +294,35 @@ class OT_U_TLAY(DataBlock):
         
         return ret
     
+    def __str__(self):
+      """Actually render the TLAY."""
+      fields = self.data['fields']
+      fields.sort(key=lambda f: f.get('line', 0) * 100 + f.get('column', 0))
+      line = -1
+      res = []
+      for field in fields:
+        new_line = field.get('line', line)
+        if new_line > line:
+          res.append('\n' * (new_line - line))
+          line = new_line
+        if 'column' in field:
+          res.append(self.CSI + '%dG' % (field['column']))
+        formating = field.get('formating', '')
+        if 'bold' in formating:
+          res.append(self.CSI + '1m')
+        if 'small' in formating:
+          res.append(self.CSI + '2m')
+        if 'italic' in formating:
+          res.append(self.CSI + '3m')
+        res.append(field.get('text', ''))
+        res.append(self.CSI + 'm')
+
+      return 'OT_U_TLAY (len: %d, version: %d, fields: %d)' % (
+          self.header['length'], self.header['version'], len(fields)) + ''.join(res)
+
+    def __repr__(self):
+      return super(OT_U_TLAY, self).__repr__()
+
     fields = [
                 ('standard', 4),
                 ('field_count', 4, int),
