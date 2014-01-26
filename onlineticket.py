@@ -14,6 +14,7 @@ str_func = lambda v: {dict: dict_str, list: list_str}.get(type(v), str if isinst
 date_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y")
 datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
 
+
 class DataBlock(object):
     """
     A DataBlock with a standard-header. The base for custom implementations.
@@ -49,7 +50,15 @@ class DataBlock(object):
                 l = l(self, res)
             dat = self.read(l)
             if len(val) > 2 and val[2] is not None:
-                dat = val[2].get(dat, dat) if type(val[2]) == dict else val[2](dat)
+                if type(val[2]) == dict:
+                  dat = val[2].get(dat, dat)
+                else:
+                  try:
+                    dat = val[2](dat)
+                  except Exception, e:
+                    print 'Couldn\'t decode', val, repr(dat), self.__class__
+                    print dict_str(res)
+                    raise
             res[key] = dat
             if len(val) > 3:
                 dat = val[3](self, res)
