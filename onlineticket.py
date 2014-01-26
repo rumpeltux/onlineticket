@@ -93,7 +93,7 @@ class GenericBlock(DataBlock):
 
 class OT_U_HEAD(DataBlock):
     fields = [
-                ('carrier', 4, int),
+                ('carrier', 4),
                 ('auftragsnummer', 8),
                 ('padding', 12),
                 ('creation_date', 12, datetime_parser),
@@ -106,7 +106,6 @@ class OT_U_HEAD(DataBlock):
              ]
 
 
-
 class OT_0080VU_Tag(DataBlock):
   generic = [
                ('tag', 1, uint8), # 0xdc
@@ -117,7 +116,6 @@ class OT_0080VU_Tag(DataBlock):
                ('org_id', 2, uint16),
                ('data', lambda self, res: res['length'] - 3)
             ]
-
 
 class OT_0080VU(DataBlock):
   """Elektronischer Fahrschein (EFS) nach VDV-KA."""
@@ -162,8 +160,11 @@ class OT_0080VU(DataBlock):
 class OT_0080ID(DataBlock):
     fields = [
                 ('ausweis_typ', 2, {
-                    '01': 'CC', '04': 'BC', '07': 'EC', '09': 'Personalausweis',
-                    '11': 'Bonus.card business'}),
+                    '01': 'CC', '04': 'BC', '07': 'EC',
+                    '08': 'Bonus.card business',
+                    '09': 'Personalausweis',
+                    '10': 'Reisepass',
+                    '11': 'bahn.bonus Card'}),
                 ('ziffer_ausweis', 4)
              ]
 
@@ -300,8 +301,8 @@ class OT_U_TLAY(DataBlock):
 class OT(DataBlock):
     generic = [
         ('header', 3),
-        ('version', 2, int),
-        ('carrier', 4, int),
+        ('version', 2),
+        ('carrier', 4),
         ('key_id', 5),
         ('signature', 0, None,
             lambda self, res: decoder.decode(self.read(50))),
@@ -310,7 +311,8 @@ class OT(DataBlock):
     fields = [
         ('data_length', 4, int),
         ('ticket', 0, None,
-            lambda self, res: read_blocks(zlib.decompress(self.read(res['data_length'])), read_block))
+            lambda self, res: read_blocks(
+              zlib.decompress(self.read(res['data_length'])), read_block))
         ]
 
 def read_block(data, offset):
@@ -360,6 +362,7 @@ if __name__ == '__main__':
                 except Exception, f:
                     sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
                         (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
+                    raise
     print dict_str(ots)
 
     # Some more sample functionality:
