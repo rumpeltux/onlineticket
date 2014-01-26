@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
-# Copyright by Hagen Fritsch, 2009-2012
-
-import zlib
+# Copyright by Hagen Fritsch, 2009-2014
 import datetime
+import re
+import struct
+import zlib
+
 from pyasn1.codec.ber import decoder
 
 #utils
@@ -11,8 +13,26 @@ dict_str = lambda d: "\n"+"\n".join(["%s:\t%s" % (k, str_func(v).replace("\n", "
 list_str = lambda l: "\n"+"\n".join(["%d:\t%s" % (i, str_func(v).replace("\n", "\n\t")) for i,v in enumerate(l)])
 str_func = lambda v: {dict: dict_str, list: list_str}.get(type(v), str if isinstance(v, DataBlock) else repr)(v)
 
+# Core datatypes:
+uint8 = ord
+uint16 = lambda x: ord(x[1]) | ord(x[0]) << 8
+uint24 = lambda x: ord(x[2]) | ord(x[1]) << 8 | ord(x[0]) << 16
+uint32 = lambda x: ord(x[3]) | ord(x[2]) << 8 | ord(x[1]) << 16 | ord(x[0]) << 24
+
 date_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y")
 datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
+
+def DateTimeCompact(data):
+  """Based on http://www.kcefm.de/imperia/md/content/kcefm/kcefmvrr/2010_02_12_kompendiumvrrfa2dvdv_1_4.pdf"""
+  day, time = struct.unpack('>HH', data)
+  year = 1990 + (day >> 9)
+  month = (day >> 5) & 0xf
+  day = day & 0x1f
+  hour = time >> 11
+  minute = (time >> 5) & 0x3f
+  second = time & 0x1f
+  # Since hour may be 24 which is not accepted by datetime, we add it manually.
+  return datetime.datetime(year, month, day, 0, minute, second) + datetime.timedelta(0, 3600*hour)
 
 
 class DataBlock(object):
@@ -86,9 +106,58 @@ class OT_U_HEAD(DataBlock):
              ]
 
 
-class OT_0080VU(GenericBlock):
-    """Appearing on some newer DB tickets. Content yet unknown."""
-    pass
+
+class OT_0080VU_Tag(DataBlock):
+  generic = [
+               ('tag', 1, uint8), # 0xdc
+               # This may be ASN.1 TLV structure in which case additional
+               # length parsing for long fields may be required some day.
+               ('length', 1, uint8),
+               ('type', 1, uint8),
+               ('org_id', 2, uint16),
+               ('data', lambda self, res: res['length'] - 3)
+            ]
+
+
+class OT_0080VU(DataBlock):
+  """Elektronischer Fahrschein (EFS) nach VDV-KA."""
+  
+  def read_tag(self, _, res):
+    data = OT_0080VU_Tag(res['list_raw']).header
+    if data['tag'] != 0xdc or data['length'] != 3 + 3:
+      print 'WARNING: Unexpected station data:'
+      print dict_str(data)
+      return data
+    return uint24(data['data'])
+  
+  def read_efs(self, res):
+    fields = [
+                ('berechtigungs_nr', 4, uint32),
+                ('kvp_organisations_id', 2, uint16),
+                ('produkt_nr', 2, uint16),
+                ('pv_organisations_id', 2, uint16),
+                ('valid_from', 4, DateTimeCompact),
+                ('valid_to', 4, DateTimeCompact),
+                ('preis', 3, uint24),
+                ('sam_seqno', 4, uint32),
+                ('list_length', 1, uint8),
+                ('list_raw', lambda self, res: res['list_length']),
+                ('station_id', 0, None, self.read_tag)
+              ]
+    ret = []
+    for i in range(res['efs_anzahl']):
+        ret.append(self.dict_read(fields))
+    
+    return ret
+
+  fields = [
+              ('terminal_id', 2, uint16),
+              ('sam_id', 3, uint24),
+              ('personen_anzahl', 1, uint8),
+              ('efs_anzahl', 1, uint8),
+              ('efs', 0, None, read_efs)
+            ]
+
 
 class OT_0080ID(DataBlock):
     fields = [
