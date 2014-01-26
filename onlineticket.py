@@ -256,30 +256,12 @@ def read_blocks(data, read_func):
         ret.append(block)
     return ret
 
-def fix_zxing_(data):
-    """
-    ZXing parser seems to return weird results.
-    See http://code.google.com/p/zxing/issues/detail?id=1260#c4 from which
-    the fix here is derived.
-    """
-    out = data[:]
-    out_counter = 0
-    reducer = 0
-    for i in xrange(len(data)):
-        out[out_counter] = data[i] + reducer
-        if data[i] == 0xc3:
-            reducer = 0x40
-        elif data[i] == 0xc2:
-            reducer = 0
-        else:
-            reducer = 0
-            out_counter += 1
-    return out[:out_counter]
-
 def fix_zxing(data):
-    return ''.join(map(chr, fix_zxing_(map(ord, data))))
-           
-stb=lambda x: ' '.join([bin(ord(i)) for i in x])
+    """
+    ZXing parser seems to return utf-8 encoded binary data.
+    See also http://code.google.com/p/zxing/issues/detail?id=1260#c4
+    """
+    return data.decode('utf-8').encode('latin1')
 
 if __name__ == '__main__':
     import sys
