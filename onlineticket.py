@@ -52,16 +52,16 @@ class DataBlock(object):
         self.offset = offset
         self.header = self.dict_read(self.generic)
         self.data = self.dict_read(self.fields)
-    
+
     def __str__(self):
         return "%s\t%s%s" % (self.__class__.__name__, dict_str(self.header).replace("\n", "\n\t"),
             dict_str(self.data).replace("\n", "\n\t"))
-    
+
     def read(self, l):
         res = self.stream[self.offset:self.offset+l]
         self.offset += l
         return res
-    
+
     def dict_read(self, directory):
         res = {}
         for val in directory:
@@ -120,7 +120,7 @@ class OT_0080VU_Tag(DataBlock):
 
 class OT_0080VU(DataBlock):
   """Elektronischer Fahrschein (EFS) nach VDV-KA."""
-  
+
   def read_tag(self, _, res):
     data = OT_0080VU_Tag(res['list_raw']).header
     if data['tag'] != 0xdc or data['length'] != 3 + 3:
@@ -128,7 +128,7 @@ class OT_0080VU(DataBlock):
       print dict_str(data)
       return data
     return uint24(data['data'])
-  
+
   def read_efs(self, res):
     fields = [
                 ('berechtigungs_nr', 4, uint32),
@@ -146,7 +146,7 @@ class OT_0080VU(DataBlock):
     ret = []
     for i in range(res['efs_anzahl']):
         ret.append(self.dict_read(fields))
-    
+
     return ret
 
   fields = [
@@ -171,7 +171,7 @@ class OT_0080ID(DataBlock):
 
 class OT_0080BL(DataBlock):
     def read_sblocks(self, res):
-        
+
         def passagier_parser(x):
             x = [int(i) for i in x.split('-')]
             return {
@@ -186,9 +186,9 @@ class OT_0080BL(DataBlock):
                   39: 'Einsteiger BahnCard 25 (mit Abo)'.
                 }[int(x[2])]
             }
-        
+
         ident = lambda x: x
-        
+
         typen = {
             '001': ('Preismodell',ident),
             '002': ('Produktklasse Gesamtticket',{'0': 'C', '1': 'B', '2': 'A'}),
@@ -215,21 +215,21 @@ class OT_0080BL(DataBlock):
               # 104: Frankenberg(Eder)
               # 156: Heidelberg Hbf
                 }
-                
+
         ret = {}
-        
+
         for i in range(res['data_count']):
             assert self.read(1) == "S"
             typ = self.read(3)
             l   = int(self.read(4))
             dat = self.read(l)
-            
+
             typ, mod = typen.get(typ, (typ,ident))
             dat = mod.get(dat, dat) if type(mod) == dict else mod(dat)
-            
+
             ret[typ] = dat
         return ret
-    
+
     def read_auftraege(self, res):
         fields = [
                     ('certificate', 11),
@@ -241,9 +241,9 @@ class OT_0080BL(DataBlock):
         ret = []
         for i in range(res['auftrag_count']):
             ret.append(self.dict_read(fields))
-        
+
         return ret
-    
+
     fields = [
                 ('TBD0', 2),
                 # '00' bei Schönem WE-Ticket / Ländertickets / Quer-Durchs-Land
@@ -298,7 +298,7 @@ class OT_U_TLAY(DataBlock):
                     ('formating', 1, {
                         '0': 'default',
                         '1': 'bold',
-                        '2': 'italic', 
+                        '2': 'italic',
                         '3': 'bold & italic',
                         '4': 'small font (the "132-font" in RCT-2)',
                         '5': 'small + bold',
@@ -310,9 +310,9 @@ class OT_U_TLAY(DataBlock):
         ret = []
         for i in range(res['field_count']):
             ret.append(self.dict_read(fields))
-        
+
         return ret
-    
+
     def __str__(self):
       """Actually render the TLAY."""
       fields = self.data['fields']
