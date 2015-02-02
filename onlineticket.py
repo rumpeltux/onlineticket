@@ -6,7 +6,7 @@ import re
 import struct
 import zlib
 
-from pyasn1.codec.ber import decoder
+from pyasn1.codec.ber import decoder   # apt-get install python-pyasn1
 
 #utils
 dict_str = lambda d: "\n"+"\n".join(["%s:\t%s" % (k, str_func(v).replace("\n", "\n\t")) for k,v in d.iteritems()])
@@ -123,11 +123,14 @@ class OT_0080VU(DataBlock):
 
   def read_tag(self, _, res):
     data = OT_0080VU_Tag(res['list_raw']).header
-    if data['tag'] != 0xdc or data['length'] != 3 + 3:
-      print 'WARNING: Unexpected station data:'
-      print dict_str(data)
-      return data
-    return uint24(data['data'])
+    if data['tag'] == 0xdc:
+      if data['length'] == 3 + 3:
+        return uint24(data['data'])
+      if data['length'] == 3 + 2:
+        return uint16(data['data'])
+    print 'WARNING: Unexpected station data:'
+    print dict_str(data)
+    return data
 
   def read_efs(self, res):
     fields = [
@@ -142,6 +145,7 @@ class OT_0080VU(DataBlock):
                 ('list_length', 1, uint8),
                 ('list_raw', lambda self, res: res['list_length']),
                 ('station_id', 0, None, self.read_tag)
+                # The IBNR. 3 == Bayern-Ticket
               ]
     ret = []
     for i in range(res['efs_anzahl']):
@@ -210,10 +214,10 @@ class OT_0080BL(DataBlock):
             '028': ('Vorname, Name', lambda x: x.split("#")),
             '031': ('Gültig von', german_date_parser),
             '032': ('Gültig bis', german_date_parser),
-            '035': ('TBD Bahnhof ID von', int),
-            '036': ('TBD Bahnhof ID nach', int),
-              # 104: Frankenberg(Eder)
-              # 156: Heidelberg Hbf
+            '035': ('Start-Bf-ID', int),
+            '036': ('Ziel-Bf-ID', int),
+            '040': ('Anzahl Personen', int),
+            '041': ('TBD EFS Anzahl', int),
                 }
 
         ret = {}
@@ -247,7 +251,7 @@ class OT_0080BL(DataBlock):
     fields = [
                 ('TBD0', 2),
                 # '00' bei Schönem WE-Ticket / Ländertickets / Quer-Durchs-Land
-                # '00' bei Vorläufiger Weltmeister BC 25 (Ticket von 2011)
+                # '00' bei Vorläufiger BC
                 # '02' bei Normalpreis Produktklasse C/B, aber auch Ausnahmen
                 # '03' bei normalem IC/EC/ICE Ticket
                 # '04' Hinfahrt A, Rückfahrt B; Rail&Fly ABC; Veranstaltungsticket; auch Ausnahmen
