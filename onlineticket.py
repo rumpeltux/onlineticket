@@ -183,7 +183,7 @@ class OT_0080BL(DataBlock):
                   78: 50,
                   49: 25,
                   27: 'Einsteiger BahnCard 25 (Abo frei)',
-                  39: 'Einsteiger BahnCard 25 (mit Abo)'.
+                  39: 'Einsteiger BahnCard 25 (mit Abo)',
                 }[int(x[2])]
             }
 
