@@ -20,6 +20,7 @@ uint24 = lambda x: ord(x[2]) | ord(x[1]) << 8 | ord(x[0]) << 16
 uint32 = lambda x: ord(x[3]) | ord(x[2]) << 8 | ord(x[1]) << 16 | ord(x[0]) << 24
 
 date_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y")
+german_date_parser = lambda x: datetime.datetime.strptime(x, "%d.%m.%Y")
 datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
 
 def DateTimeCompact(data):
@@ -173,7 +174,18 @@ class OT_0080BL(DataBlock):
         
         def passagier_parser(x):
             x = [int(i) for i in x.split('-')]
-            return {'Erwachsene': x[0],'Bahncards':x[1],'Bahncard':{0: 0, 19: 50, 78: 50, 49: 25}[int(x[2])]}
+            return {
+              'Erwachsene': x[0],
+              'Bahncards': x[1],
+              'Bahncard': {
+                  0: 0,
+                  19: 50,
+                  78: 50,
+                  49: 25,
+                  27: 'Einsteiger BahnCard 25 (Abo frei)',
+                  39: 'Einsteiger BahnCard 25 (mit Abo)'.
+                }[int(x[2])]
+            }
         
         ident = lambda x: x
         
@@ -196,6 +208,12 @@ class OT_0080BL(DataBlock):
             '026': ('Preisart', {'12': 'Normalpreis', '13': 'Sparpreis', '3': 'Rail&Fly'}),
             '027': ('CC-#/Ausweis-ID',ident),
             '028': ('Vorname, Name', lambda x: x.split("#")),
+            '031': ('Gültig von', german_date_parser),
+            '032': ('Gültig bis', german_date_parser),
+            '035': ('TBD Bahnhof ID von', int),
+            '036': ('TBD Bahnhof ID nach', int),
+              # 104: Frankenberg(Eder)
+              # 156: Heidelberg Hbf
                 }
                 
         ret = {}
@@ -229,10 +247,11 @@ class OT_0080BL(DataBlock):
     fields = [
                 ('TBD0', 2),
                 # '00' bei Schönem WE-Ticket / Ländertickets / Quer-Durchs-Land
+                # '00' bei Vorläufiger Weltmeister BC 25 (Ticket von 2011)
                 # '02' bei Normalpreis Produktklasse C/B, aber auch Ausnahmen
                 # '03' bei normalem IC/EC/ICE Ticket
                 # '04' Hinfahrt A, Rückfahrt B; Rail&Fly ABC; Veranstaltungsticket; auch Ausnahmen
-                # '05' bei Facebook-Ticket
+                # '05' bei Facebook-Ticket, BC+Sparpreis+neue BC25 (Ticket von 2011)
                 # '18' bei Kauf via Android App
                 ('auftrag_count', 1, int),
                 ('blocks', 0, None, read_auftraege),
