@@ -20,7 +20,12 @@ uint16 = lambda x: ord(x[1]) | ord(x[0]) << 8
 uint24 = lambda x: ord(x[2]) | ord(x[1]) << 8 | ord(x[0]) << 16
 uint32 = lambda x: ord(x[3]) | ord(x[2]) << 8 | ord(x[1]) << 16 | ord(x[0]) << 24
 
-date_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y")
+DEBUG = 0
+def debug(tag, arg, *extra):
+    if DEBUG: print(tag, arg, *extra)
+    return arg
+
+date_parser = lambda x: datetime.datetime.strptime(debug('date', x), "%d%m%Y")
 german_date_parser = lambda x: datetime.datetime.strptime(x, "%d.%m.%Y")
 datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
 
@@ -404,7 +409,7 @@ def read_block(data, offset):
                    '0080VU': OT_0080VU,
                    '1180AI': OT_1180AI,
                    'RAWJSN': OT_RAWJSN}
-    block_type = data[offset:offset+6]
+    block_type = debug('block_type', data[offset:offset+6], repr(data[offset:]))
     return block_types.get(block_type, GenericBlock)(data, offset)
 
 readot = lambda x: ''.join([chr(int(i,16)) for i in x.strip().split(" ")])
