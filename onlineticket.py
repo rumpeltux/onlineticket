@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
 # Copyright by Hagen Fritsch, 2009-2014
+from __future__ import print_function
 import datetime
 import re
 import struct
@@ -77,8 +78,8 @@ class DataBlock(object):
                   try:
                     dat = val[2](dat)
                   except Exception, e:
-                    print 'Couldn\'t decode', val, repr(dat), self.__class__
-                    print dict_str(res)
+                    print('Couldn\'t decode', val, repr(dat), self.__class__)
+                    print(dict_str(res))
                     raise
             res[key] = dat
             if len(val) > 3:
@@ -128,8 +129,8 @@ class OT_0080VU(DataBlock):
         return uint24(data['data'])
       if data['length'] == 3 + 2:
         return uint16(data['data'])
-    print 'WARNING: Unexpected station data:'
-    print dict_str(data)
+    print('WARNING: Unexpected station data:')
+    print(dict_str(data))
     return data
 
   def read_efs(self, res):
@@ -374,7 +375,7 @@ class OT_RAWJSN(DataBlock):
               with_spaces = re.sub(r'([,{][^}:]+?):([{[0-9\'"])', r'\1: \2', json_data)
               self.data.update(yaml.load(with_spaces))
             except:
-              print 'Couldn\'t decode JSON data', repr(json_data)
+              print('Couldn\'t decode JSON data', repr(json_data))
               raise
 
 
@@ -427,7 +428,7 @@ def fix_zxing(data):
 if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2:
-        print 'Usage: %s [ticket_files]' % sys.argv[0]
+        print('Usage: %s [ticket_files]' % sys.argv[0])
     ots = {}
     for ticket in sys.argv[1:]:
         try:
@@ -444,10 +445,10 @@ if __name__ == '__main__':
                     sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
                         (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
                     raise
-    print dict_str(ots)
+    print(dict_str(ots))
 
     # Some more sample functionality:
     # 1. Sort by date
     #tickets = reduce(list.__add__, ots.values())
     #tickets.sort(lambda a, b: cmp(a.data['ticket'][0].data['creation_date'], b.data['ticket'][0].data['creation_date']))
-    #print list_str(tickets)
+    #print(list_str(tickets))
