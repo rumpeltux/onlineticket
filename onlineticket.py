@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
-# Copyright by Hagen Fritsch, 2009-2014
+# Copyright by Hagen Fritsch, 2009-2017
 from __future__ import print_function
 import datetime
 import re
@@ -241,18 +241,21 @@ class OT_0080BL(DataBlock):
         return ret
 
     def read_auftraege(self, res):
-        fields = [
+        version_2_fields = [
                     ('certificate', 11),
                     ('padding', 11),
                     ('valid_from', 8, date_parser),
                     ('valid_to', 8, date_parser),
                     ('serial', 8, lambda x: int(x.split('\x00')[0]))
                  ]
-        ret = []
-        for i in range(res['auftrag_count']):
-            ret.append(self.dict_read(fields))
-
-        return ret
+        # V3: 10102017 10102017 265377293\x00 12102017 12102017 265377294\x00
+        version_3_fields = [
+                    ('valid_from', 8, date_parser),
+                    ('valid_to', 8, date_parser),
+                    ('serial', 10, lambda x: int(x.split('\x00')[0]))
+                 ]
+        fields = version_2_fields if self.header['version'] < 3 else version_3_fields
+        return [self.dict_read(fields) for i in range(res['auftrag_count'])]
 
     fields = [
                 ('TBD0', 2),
