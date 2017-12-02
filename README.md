@@ -2,10 +2,15 @@
 
 Hintergrund: https://itooktheredpill.irgendwo.org/2010/onlinetickets-der-bahn/
 
-## Benutzung
+## Installation & Abhängigkeiten
 
 Das Skript muss nicht gesondert installiert werden.
 Es wird das Paket `python-pyasn1` benötigt.
+`parsepdfs.sh` benötigt zusätzlich `poppler-utils` and `imagemagick` um die
+Bilder aus den PDFs zu extrahieren, sowie eine funktionierende
+Java-Installation um den Barcode mithilfe von zxing zu dekodieren.
+
+## Benutzung
 
 Das Skript verarbeitet die im Barcode kodierten Daten, diese müssen also
 zunächst aus dem Ticket extrahiert werden. Wenn man das PDF des Tickets hat
