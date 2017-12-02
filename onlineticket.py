@@ -443,7 +443,7 @@ if __name__ == '__main__':
         try:
             tickets = [readot(i) for i in open(ticket)]
         except:
-            tickets = [open(ticket).read()]
+            tickets = [open(ticket, 'rb').read()]
         for ot in tickets:
             try:
                 ots.setdefault(ticket, []).append(OT(ot))
