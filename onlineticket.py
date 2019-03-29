@@ -13,7 +13,10 @@ from Crypto.PublicKey import DSA
 from Crypto.Signature import DSS
 from Crypto.Math.Numbers import Integer
 
-from pyasn1.codec.ber import decoder   # apt-get install python-pyasn1
+import os
+import asn1 # pip install asn1
+import requests # for downloading public key
+import xml.etree.ElementTree as ET # for parsing public key file
 
 #utils
 dict_str = lambda d: "\n"+"\n".join(["%s:\t%s" % (k, str_func(v).replace("\n", "\n")) for k,v in d.items()])
@@ -400,9 +403,10 @@ class OT(DataBlock):
         ('version', 2),
         ('carrier', 4),
         ('key_id', 5),
-        ('signature', 0, None,
-            lambda self, res: decoder.decode(self.read(50))),
-        #('padding', 0, None, lambda self, res: self.read(4 - self.offset%4)) #dword padding
+        ('signature', 50),
+        # ('signature', 0, None,
+        #     lambda self, res: decoder.decode(self.read(50))),
+        #('padding', 0, None, lambda self, res: self.read(4 - self.offset%4)) #dword paddng
               ]
     fields = [
         ('data_length', 4, int),
@@ -440,6 +444,61 @@ def fix_zxing(data):
     """
     return data.decode('utf-8').encode('latin1')
 
+
+def get_pubkey(issuer, keyid, force_update=False):
+  keyfilename = 'keys.xml'
+  if (not os.path.isfile(keyfilename)) or force_update:
+    print("Downloading new keys.")
+    certurl = 'https://railpublickey.uic.org/download.php'
+    xmlpubkeys = requests.get(certurl).text
+    with open(keyfilename, 'w') as xmlout:
+      xmlout.write(xmlpubkeys)
+  else:
+    print("Reading existing keys from disk.")
+    with open(keyfilename, 'r') as xmlin:
+      xmlpubkeys = xmlin.read()
+
+  root = ET.fromstring(xmlpubkeys)
+
+  issuer = issuer.decode('utf-8').lstrip('0')
+  keyid = keyid.decode('utf-8').lstrip('0')
+
+  for child in root:
+    ic = child.find('issuerCode').text
+    xid = child.find('id').text
+    if ic == issuer and xid == keyid:
+      return child.find('publicKey').text
+
+  sys.stderr.write("Public key not found!")
+  return None
+
+def verifysig(message, signature, pubkey):
+  # get r and s out of the ASN-1
+  decoder = asn1.Decoder()
+  decoder.start(signature)
+  tag, seq = decoder.read()
+  decoder.start(seq)
+  tag, r = decoder.read()
+  tag, s = decoder.read()
+
+  rbytes = Integer(r).to_bytes()
+  sbytes = Integer(s).to_bytes()
+
+  verifykey = DSA.import_key(base64.b64decode(pubkey))
+
+  h = SHA1.new(message)
+  verifier = DSS.new(verifykey, 'fips-186-3')
+
+  try:
+    verifier.verify(h, rbytes+sbytes)
+    print("Signature is valid.")
+    return True
+  except ValueError:
+    print("Signature NOT valid.")
+    return False
+
+
+
 if __name__ == '__main__':
   import sys
   if len(sys.argv) < 2:
@@ -461,6 +520,17 @@ if __name__ == '__main__':
                       (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
                   raise
   print(dict_str(ots))
+
+
+  for ot in ots:
+    for ticket in ots[ot]:
+      issuer = ticket.header['carrier']
+      keyid = ticket.header['key_id']
+      pubkey = get_pubkey(issuer, keyid)
+      if pubkey:
+        signature = ticket.header['signature']
+        rawticket = ticket.stream[68:]
+        verifysig(rawticket, signature, pubkey)
 
 
   # Some more sample functionality:
