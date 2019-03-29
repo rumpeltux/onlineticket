@@ -2,33 +2,39 @@
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
 # Copyright by Hagen Fritsch, 2009-2017
-from __future__ import print_function
+
 import datetime
 import re
 import struct
 import zlib
+import base64
+from Crypto.Hash import SHA1
+from Crypto.PublicKey import DSA
+from Crypto.Signature import DSS
+from Crypto.Math.Numbers import Integer
 
 from pyasn1.codec.ber import decoder   # apt-get install python-pyasn1
 
 #utils
-dict_str = lambda d: "\n"+"\n".join(["%s:\t%s" % (k, str_func(v).replace("\n", "\n\t")) for k,v in d.iteritems()])
-list_str = lambda l: "\n"+"\n".join(["%d:\t%s" % (i, str_func(v).replace("\n", "\n\t")) for i,v in enumerate(l)])
+dict_str = lambda d: "\n"+"\n".join(["%s:\t%s" % (k, str_func(v).replace("\n", "\n")) for k,v in d.items()])
+list_str = lambda l: "\n"+"\n".join(["%d:\t%s" % (i, str_func(v).replace("\n", "\n")) for i,v in enumerate(l)])
 str_func = lambda v: {dict: dict_str, list: list_str}.get(type(v), str if isinstance(v, DataBlock) else repr)(v)
 
 # Core datatypes:
 uint8 = ord
-uint16 = lambda x: ord(x[1]) | ord(x[0]) << 8
-uint24 = lambda x: ord(x[2]) | ord(x[1]) << 8 | ord(x[0]) << 16
-uint32 = lambda x: ord(x[3]) | ord(x[2]) << 8 | ord(x[1]) << 16 | ord(x[0]) << 24
+uint16 = lambda x: x[1] | x[0] << 8
+uint24 = lambda x: x[2] | x[1] << 8 | x[0] << 16
+uint32 = lambda x: x[3] | x[2] << 8 | x[1] << 16 | x[0] << 24
+
 
 DEBUG = 0
 def debug(tag, arg, *extra):
-    if DEBUG: print(tag, arg, *extra)
+    if DEBUG: print(tag, arg, *extra, "\n")
     return arg
 
-date_parser = lambda x: datetime.datetime.strptime(debug('date', x), "%d%m%Y")
-german_date_parser = lambda x: datetime.datetime.strptime(x, "%d.%m.%Y")
-datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
+date_parser = lambda x: datetime.datetime.strptime(debug('date', x).decode('utf-8'), "%d%m%Y")
+german_date_parser = lambda x: datetime.datetime.strptime(x.decode('utf-8'), "%d.%m.%Y")
+datetime_parser = lambda x: datetime.datetime.strptime(x.decode('utf-8'), "%d%m%Y%H%M")
 
 def DateTimeCompact(data):
   """Based on http://www.kcefm.de/imperia/md/content/kcefm/kcefmvrr/2010_02_12_kompendiumvrrfa2dvdv_1_4.pdf"""
@@ -83,7 +89,7 @@ class DataBlock(object):
                 else:
                   try:
                     dat = val[2](dat)
-                  except Exception, e:
+                  except Exception as e:
                     print('Couldn\'t decode', val, repr(dat), self.__class__)
                     print(dict_str(res))
                     raise
@@ -230,7 +236,7 @@ class OT_0080BL(DataBlock):
         ret = {}
 
         for i in range(res['data_count']):
-            assert self.read(1) == "S"
+            assert self.read(1) == b"S"
             typ = self.read(3)
             l   = int(self.read(4))
             dat = self.read(l)
@@ -247,13 +253,13 @@ class OT_0080BL(DataBlock):
                     ('padding', 11),
                     ('valid_from', 8, date_parser),
                     ('valid_to', 8, date_parser),
-                    ('serial', 8, lambda x: int(x.split('\x00')[0]))
+                    ('serial', 8, lambda x: int(x.split(b'\x00')[0]))
                  ]
         # V3: 10102017 10102017 265377293\x00 12102017 12102017 265377294\x00
         version_3_fields = [
                     ('valid_from', 8, date_parser),
                     ('valid_to', 8, date_parser),
-                    ('serial', 10, lambda x: int(x.split('\x00')[0]))
+                    ('serial', 10, lambda x: int(x.split(b'\x00')[0]))
                  ]
         fields = version_2_fields if self.header['version'] < 3 else version_3_fields
         return [self.dict_read(fields) for i in range(res['auftrag_count'])]
@@ -406,13 +412,13 @@ class OT(DataBlock):
         ]
 
 def read_block(data, offset):
-    block_types = {'U_HEAD': OT_U_HEAD,
-                   'U_TLAY': OT_U_TLAY,
-                   '0080ID': OT_0080ID,
-                   '0080BL': OT_0080BL,
-                   '0080VU': OT_0080VU,
-                   '1180AI': OT_1180AI,
-                   'RAWJSN': OT_RAWJSN}
+    block_types = {b'U_HEAD': OT_U_HEAD,
+                   b'U_TLAY': OT_U_TLAY,
+                   b'0080ID': OT_0080ID,
+                   b'0080BL': OT_0080BL,
+                   b'0080VU': OT_0080VU,
+                   b'1180AI': OT_1180AI,
+                   b'RAWJSN': OT_RAWJSN}
     block_type = debug('block_type', data[offset:offset+6], repr(data[offset:]))
     return block_types.get(block_type, GenericBlock)(data, offset)
 
@@ -435,29 +441,31 @@ def fix_zxing(data):
     return data.decode('utf-8').encode('latin1')
 
 if __name__ == '__main__':
-    import sys
-    if len(sys.argv) < 2:
-        print('Usage: %s [ticket_files]' % sys.argv[0])
-    ots = {}
-    for ticket in sys.argv[1:]:
-        try:
-            tickets = [readot(i) for i in open(ticket)]
-        except:
-            tickets = [open(ticket, 'rb').read()]
-        for ot in tickets:
-            try:
-                ots.setdefault(ticket, []).append(OT(ot))
-            except Exception, e:
-                try:
-                    ots.setdefault(ticket, []).append(OT(fix_zxing(ot)))
-                except Exception, f:
-                    sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
-                        (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
-                    raise
-    print(dict_str(ots))
+  import sys
+  if len(sys.argv) < 2:
+      print('Usage: %s [ticket_files]' % sys.argv[0])
+  ots = {}
+  for ticket in sys.argv[1:]:
+      try:
+          tickets = [readot(i) for i in open(ticket)]
+      except:
+          tickets = [open(ticket, 'rb').read()]
+      for ot in tickets:
+          try:
+              ots.setdefault(ticket, []).append(OT(ot))
+          except Exception as e:
+              try:
+                  ots.setdefault(ticket, []).append(OT(fix_zxing(ot)))
+              except Exception as f:
+                  sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
+                      (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
+                  raise
+  print(dict_str(ots))
 
-    # Some more sample functionality:
-    # 1. Sort by date
-    #tickets = reduce(list.__add__, ots.values())
-    #tickets.sort(lambda a, b: cmp(a.data['ticket'][0].data['creation_date'], b.data['ticket'][0].data['creation_date']))
-    #print(list_str(tickets))
+
+  # Some more sample functionality:
+  # 1. Sort by date
+  #tickets = reduce(list.__add__, ots.values())
+  #tickets.sort(lambda a, b: cmp(a.data['ticket'][0].data['creation_date'], b.data['ticket'][0].data['creation_date']))
+  #print(list_str(tickets))
+
