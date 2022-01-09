@@ -37,7 +37,7 @@ Das Skript verarbeitet die im Barcode kodierten Daten, diese müssen also
 zunächst aus dem Ticket extrahiert werden. Wenn man das PDF des Tickets hat
 geht dies sehr leicht mit:
 
-    sh parsepdfs.sh
+    ./parsepdfs.sh *.pdf
 
 Nun sollte man für jedes PDF eine `.txt` Datei mit den Daten des Barcodes
 erhalten haben, die man nun an das Skript füttern kann:

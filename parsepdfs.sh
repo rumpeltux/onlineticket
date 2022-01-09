@@ -1,4 +1,6 @@
 #!/bin/sh
+# Usage: ./parsepdf.sh *.pdf
+
 SCRIPTDIR=$(dirname $0)
 
 # Download the binaries (if not yet existing)
@@ -8,15 +10,21 @@ for lib in core javase; do
 done
 [ -e $SCRIPTDIR/jcommander.jar ] || wget https://repo1.maven.org/maven2/com/beust/jcommander/1.72/jcommander-1.72.jar -O $SCRIPTDIR/jcommander.jar
 
-# Cleanup filenames that don't work well with scripts.
-rename -v 'tr/ ()/___/' *
-# Extract all the images.
-for i in *.pdf; do pdfimages $i $i; done
-# Convert all images to png.
-for i in *.pbm *.ppm; do convert $i $i.png; rm $i; done
-# Use `file` to identify all black&white images, then try to read the barcode using zxing.
-for i in `file *.png | grep 1-bit | cut -f1 -d:`; do
-    java -cp $SCRIPTDIR/zx-core.jar:$SCRIPTDIR/zx-javase.jar:$SCRIPTDIR/jcommander.jar \
-        com.google.zxing.client.j2se.CommandLineRunner \
-        --pure_barcode --dump_results --brief ./$i
+for file in $@; do
+  echo "$file: image extraction"
+  pdfimages "$file" "$file"
+  echo "$file: image conversion"
+  for i in "$file"*.pbm "$file"*.ppm; do
+    convert "$i" "$i.png"
+    rm "$i"
+  done
+  echo "$file: barcode extraction"
+  for i in "$file"*.png; do
+    if file "$i" | grep -q 1-bit; then
+      java -cp $SCRIPTDIR/zx-core.jar:$SCRIPTDIR/zx-javase.jar:$SCRIPTDIR/jcommander.jar \
+          com.google.zxing.client.j2se.CommandLineRunner \
+          --pure_barcode --dump_results --brief ./$i
+    fi
+    rm "$i"
+  done
 done
