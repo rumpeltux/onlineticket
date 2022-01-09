@@ -31,7 +31,7 @@ german_date_parser = lambda x: datetime.datetime.strptime(x, "%d.%m.%Y")
 datetime_parser = lambda x: datetime.datetime.strptime(x, "%d%m%Y%H%M")
 
 def DateTimeCompact(data):
-  """Based on https://www.kcd-nrw.de/fileadmin/03_KC_Seiten/KCD/Downloads/Technische_Dokumente/Archiv/2010_02_12_kompendiumvrrfa2dvdv_1_4.pdf"""
+  """Based on https://web.archive.org/web/20101206213922/http://www.kcefm.de/imperia/md/content/kcefm/kcefmvrr/2010_02_12_kompendiumvrrfa2dvdv_1_4.pdf"""
   day, time = struct.unpack('>HH', data)
   year = 1990 + (day >> 9)
   month = (day >> 5) & 0xf
