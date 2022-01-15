@@ -319,16 +319,16 @@ class OT_U_TLAY(DataBlock):
                     ('height', 2, int),
                     ('width', 2, int),
                     ('formating', 1, {
-                        '0': 'default',
-                        '1': 'bold',
-                        '2': 'italic',
-                        '3': 'bold & italic',
-                        '4': 'small font (the "132-font" in RCT-2)',
-                        '5': 'small + bold',
-                        '6': 'small + italic',
-                        '7': 'small + bold + italic'}),
+                        b'0': 'default',
+                        b'1': 'bold',
+                        b'2': 'italic',
+                        b'3': 'bold & italic',
+                        b'4': 'small font (the "132-font" in RCT-2)',
+                        b'5': 'small + bold',
+                        b'6': 'small + italic',
+                        b'7': 'small + bold + italic'}),
                     ('text_length', 4, int),
-                    ('text', lambda self, res: res['text_length'])
+                    ('text', lambda self, res: res['text_length'], lambda x: x.decode())
                  ]
         ret = []
         for i in range(res['field_count']):

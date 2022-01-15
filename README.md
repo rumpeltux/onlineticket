@@ -42,7 +42,7 @@ geht dies sehr leicht mit:
 Nun sollte man für jedes PDF eine `.txt` Datei mit den Daten des Barcodes
 erhalten haben, die man nun an das Skript füttern kann:
 
-    python onlineticket.py *.txt
+    python3 onlineticket.py *.txt
 
 ## Bugs
 
