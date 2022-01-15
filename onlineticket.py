@@ -3,20 +3,36 @@
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
 # Copyright by Hagen Fritsch, 2009-2017
 
+import base64
+import csv
 import datetime
+import os
 import re
 import struct
 import zlib
-import base64
-from Crypto.Hash import SHA1
-from Crypto.PublicKey import DSA
-from Crypto.Signature import DSS
-from Crypto.Math.Numbers import Integer
 
-import os
-import asn1 # pip install asn1
-import requests # for downloading public key
-import xml.etree.ElementTree as ET # for parsing public key file
+try: # pip install pycryptodome
+    from Cryptodome.Hash import SHA1
+    from Cryptodome.PublicKey import DSA
+    from Cryptodome.Signature import DSS
+    from Cryptodome.Math.Numbers import Integer
+except:
+    try:
+        from Crypto.Hash import SHA
+        print('Please remove the deprecated python3-crypto package and install python3-pycryptodome instead.',
+              file=sys.stderr)
+        exit(1)
+    except:
+        print('Note: signature verification is disabled due to missing pycryptodome package.',
+              file=sys.stderr)
+    SHA1, DSA, DSS, Integer = None, None, None, None
+
+try: # pip install pyasn1
+    import pyasn1.codec.der.decoder as asn1
+except:
+    print('Note: signature verification is disabled due to missing pyasn1 package.',
+              file=sys.stderr)
+    asn1 = None
 
 #utils
 dict_str = lambda d: "\n"+"\n".join(["%s:\t%s" % (k, str_func(v).replace("\n", "\n")) for k,v in d.items()])
@@ -397,23 +413,86 @@ class OT_RAWJSN(DataBlock):
               raise
 
 
+class SignatureVerificationError(Exception):
+    pass
+
+def get_pubkey(issuer, keyid):
+    if get_pubkey.certs is None:
+        certs_filename = os.path.join(os.path.dirname(__file__), 'certs.csv')
+        if not os.path.exists(certs_filename):
+            raise SignatureVerificationError(
+                f'certificate store not found: {certs_filename}\n'
+                'Use download_keys.py to create it.')
+        get_pubkey.certs = {}
+        with open(certs_filename) as certsfile:
+            certreader = csv.reader(certsfile, delimiter='\t')
+            for cert_issuer, xid, pubkey in certreader:
+                get_pubkey.certs[(int(cert_issuer), int(xid))] = pubkey
+    try:
+        return get_pubkey.certs[(int(issuer), int(keyid))]
+    except KeyError:
+        raise SignatureVerificationError(f'Public key not found (issuer={issuer}, keyid={keyid})')
+
+get_pubkey.certs = None
+
+def verifysig(message, signature, pubkey):
+    if DSS is None or asn1 is None:  # pycryptodome package is missing
+        raise SignatureVerificationError('Signature verification disabled')
+    if not signature:
+      raise SignatureVerificationError('Signature asn1 parsing error.')
+
+    r, s = signature
+
+    rbytes = Integer(r).to_bytes()
+    sbytes = Integer(s).to_bytes()
+
+    verifykey = DSA.import_key(pubkey)
+    h = SHA1.new(message)
+    verifier = DSS.new(verifykey, 'fips-186-3')
+
+    try:
+        verifier.verify(h, rbytes+sbytes)
+        return True
+    except ValueError as e:
+        raise SignatureVerificationError("Signature NOT valid: " + str(e))
+
 class OT(DataBlock):
+    def signature_decode(self, res):
+      '''Parses the asn1 signature and extracts the (r,s) tuple.'''
+      if not asn1: return None
+      decoded = asn1.decode(self.read(50))[0]
+      return (int(decoded[0]), int(decoded[1]))
+
+    def signature_validity(self, res):
+      if len(self.stream) - self.offset - res['data_length'] > 0:
+          return 'INVALID (trailing data)'
+      if len(self.stream) - self.offset - res['data_length'] < 0:
+          return 'INVALID (incomplete ticket data)'
+
+      try:
+          pubkey = get_pubkey(issuer=res['carrier'],
+                              keyid=res['key_id'])
+          result = verifysig(self.stream[self.offset:], res['signature'], pubkey)
+      except SignatureVerificationError as e:
+          return str(e)
+
+      return 'VALID' if result else 'INVALID'
+
     generic = [
         ('header', 3),
         ('version', 2),
         ('carrier', 4),
         ('key_id', 5),
-        ('signature', 50),
-        # ('signature', 0, None,
-        #     lambda self, res: decoder.decode(self.read(50))),
-        #('padding', 0, None, lambda self, res: self.read(4 - self.offset%4)) #dword paddng
-              ]
-    fields = [
+        ('signature', 0, None, signature_decode),
         ('data_length', 4, int),
-        ('ticket', 0, None,
-            lambda self, res: read_blocks(
-              zlib.decompress(self.read(res['data_length'])), read_block))
-        ]
+        ('signature_validity', 0, None, signature_validity),
+    ]
+
+    fields = [
+        ('ticket', 0, None, lambda self, res: read_blocks(
+              zlib.decompress(self.read(self.header['data_length'])), read_block)),
+    ]
+
 
 def read_block(data, offset):
     block_types = {b'U_HEAD': OT_U_HEAD,
@@ -442,62 +521,11 @@ def fix_zxing(data):
     ZXing parser seems to return utf-8 encoded binary data.
     See also http://code.google.com/p/zxing/issues/detail?id=1260#c4
     """
-    return data.decode('utf-8').encode('latin1')
-
-
-def get_pubkey(issuer, keyid, force_update=False):
-  keyfilename = 'keys.xml'
-  if (not os.path.isfile(keyfilename)) or force_update:
-    print("Downloading new keys.")
-    certurl = 'https://railpublickey.uic.org/download.php'
-    xmlpubkeys = requests.get(certurl).text
-    with open(keyfilename, 'w') as xmlout:
-      xmlout.write(xmlpubkeys)
-  else:
-    print("Reading existing keys from disk.")
-    with open(keyfilename, 'r') as xmlin:
-      xmlpubkeys = xmlin.read()
-
-  root = ET.fromstring(xmlpubkeys)
-
-  issuer = issuer.decode('utf-8').lstrip('0')
-  keyid = keyid.decode('utf-8').lstrip('0')
-
-  for child in root:
-    ic = child.find('issuerCode').text
-    xid = child.find('id').text
-    if ic == issuer and xid == keyid:
-      return child.find('publicKey').text
-
-  sys.stderr.write("Public key not found!")
-  return None
-
-def verifysig(message, signature, pubkey):
-  # get r and s out of the ASN-1
-  decoder = asn1.Decoder()
-  decoder.start(signature)
-  tag, seq = decoder.read()
-  decoder.start(seq)
-  tag, r = decoder.read()
-  tag, s = decoder.read()
-
-  rbytes = Integer(r).to_bytes()
-  sbytes = Integer(s).to_bytes()
-
-  verifykey = DSA.import_key(base64.b64decode(pubkey))
-
-  h = SHA1.new(message)
-  verifier = DSS.new(verifykey, 'fips-186-3')
-
-  try:
-    verifier.verify(h, rbytes+sbytes)
-    print("Signature is valid.")
-    return True
-  except ValueError:
-    print("Signature NOT valid.")
-    return False
-
-
+    data = data.decode('utf-8').encode('latin1')
+    # zxing parsing also adds a newline to the end of the file. remove that.
+    if data.endswith(b'\n'):
+      data = data[:-1]
+    return data
 
 if __name__ == '__main__':
   import sys
@@ -505,33 +533,24 @@ if __name__ == '__main__':
       print('Usage: %s [ticket_files]' % sys.argv[0])
   ots = {}
   for ticket in sys.argv[1:]:
+    try:
+      tickets = [readot(i) for i in open(ticket)]
+    except:
+      content = open(ticket, 'rb').read()
+      tickets = [content]
+    for binary_ticket in tickets:
       try:
-          tickets = [readot(i) for i in open(ticket)]
-      except:
-          tickets = [open(ticket, 'rb').read()]
-      for ot in tickets:
-          try:
-              ots.setdefault(ticket, []).append(OT(ot))
-          except Exception as e:
-              try:
-                  ots.setdefault(ticket, []).append(OT(fix_zxing(ot)))
-              except Exception as f:
-                  sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
-                      (repr(ot), repr(fix_zxing(ot)), ticket, e, f))
-                  raise
-  print(dict_str(ots))
-
-
-  for ot in ots:
-    for ticket in ots[ot]:
-      issuer = ticket.header['carrier']
-      keyid = ticket.header['key_id']
-      pubkey = get_pubkey(issuer, keyid)
-      if pubkey:
-        signature = ticket.header['signature']
-        rawticket = ticket.stream[68:]
-        verifysig(rawticket, signature, pubkey)
-
+        ot = OT(binary_ticket)
+      except Exception as e:
+        try:
+          fixed = fix_zxing(binary_ticket)
+          ot = OT(fixed)
+        except Exception as f:
+          sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
+              (repr(ot), repr(fixed), ticket, e, f))
+          raise
+      print(ot)
+      ots.setdefault(ticket, []).append(ot)
 
   # Some more sample functionality:
   # 1. Sort by date

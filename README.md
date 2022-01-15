@@ -4,8 +4,12 @@ Hintergrund: https://itooktheredpill.irgendwo.org/2010/onlinetickets-der-bahn/
 
 ## Weitere Quellen
 
+2010 war das Format der Tickets weitgehend unbekannt und dieser
+*proof of concept* Parser ist hauptsächlich durch reverse engineering
+entstanden.
+
 Im Laufe der Jahre sind weitere Quellen hinzugekommen
-(siehe [#4](https://github.com/rumpeltux/onlineticket/issues/4):
+(siehe [#4](https://github.com/rumpeltux/onlineticket/issues/4)):
 
 * [Kontrolle des UIC 918.3*-Barcodes](https://web.archive.org/web/20180905231149/https://www.bahn.de/p/view/angebot/regio/barcode.shtml)
   mit weiteren interessanten Informationen und Links.
@@ -26,10 +30,24 @@ deren relevante Downloads offenbar allerdings nur nach einer Registierung oder
 ## Installation & Abhängigkeiten
 
 Das Skript muss nicht gesondert installiert werden.
-Es wird das Paket `python-pyasn1` benötigt.
-`parsepdfs.sh` benötigt zusätzlich `poppler-utils` and `imagemagick` um die
-Bilder aus den PDFs zu extrahieren, sowie eine funktionierende
-Java-Installation um den Barcode mithilfe von zxing zu dekodieren.
+
+### Barcode Dekodierung
+
+`parsepdfs.sh` extrahiert dekodiert den Barcode aus PDF Dateien.
+Es benötigt `poppler-utils` and `imagemagick` um die Bilder aus den PDFs zu
+extrahieren, sowie eine funktionierende Java-Installation um den Barcode
+mithilfe von zxing zu dekodieren.
+
+### Signaturprüfung
+
+Die Signaturprüfung ist optional und hat folgende Abhängigkeiten:
+
+* `python3-pyasn1` (Dekodierung der Signatur)
+* `python3-pycryptodome` (Verifizierung der DSA Signatur).
+
+Public-keys der bekannten Ticketanbieter müssen zunächst heruntergeladen werden:
+
+    python3 download_keys.py
 
 ## Benutzung
 
