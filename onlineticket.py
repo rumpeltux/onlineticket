@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import zlib
+import sys
 
 try: # pip install pycryptodome
     from Cryptodome.Hash import SHA1
