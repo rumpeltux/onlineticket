@@ -481,11 +481,10 @@ class OT(DataBlock):
         return (int(decoded[0]), int(decoded[1]))
       else:
         # "Die Werte bei Version 2 müssen zwingend 32 Byte groß sein und nötigenfalls mit vorangestellten Nullbytes aufgefüllt werden."
-        signature_length = 32
         decoded = [0, 0]
-        decoded[0] = self.read(signature_length)
+        decoded[0] = self.read(32)
         decoded[0] = int.from_bytes(decoded[0], byteorder='little', signed=False)
-        decoded[1] = self.read(signature_length)
+        decoded[1] = self.read(32)
         decoded[1] = int.from_bytes(decoded[1], byteorder='little', signed=False)
         return (int(decoded[0]), int(decoded[1]))
 
