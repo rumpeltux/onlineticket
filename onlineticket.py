@@ -459,7 +459,8 @@ class OT(DataBlock):
     def signature_decode(self, res):
       '''Parses the asn1 signature and extracts the (r,s) tuple.'''
       if not asn1: return None
-      decoded = asn1.decode(self.read(50))[0]
+      signature_length = 50 if int(res['version']) <= 1 else 64
+      decoded = asn1.decode(self.read(signature_length))[0]
       return (int(decoded[0]), int(decoded[1]))
 
     def signature_validity(self, res):
