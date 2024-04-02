@@ -50,9 +50,9 @@ def debug(tag, arg, *extra):
     if DEBUG: print(tag, arg, *extra, "\n")
     return arg
 
-date_parser = lambda x: datetime.datetime.strptime(debug('date', x).decode('utf-8'), "%d%m%Y")
-german_date_parser = lambda x: datetime.datetime.strptime(x.decode('utf-8'), "%d.%m.%Y")
-datetime_parser = lambda x: datetime.datetime.strptime(x.decode('utf-8'), "%d%m%Y%H%M")
+date_parser = lambda x: datetime.datetime.strptime(debug('date', x).decode('ascii'), "%d%m%Y")
+german_date_parser = lambda x: datetime.datetime.strptime(x, "%d.%m.%Y")
+datetime_parser = lambda x: datetime.datetime.strptime(x.decode('ascii'), "%d%m%Y%H%M")
 
 def DateTimeCompact(data):
   """Based on https://web.archive.org/web/20101206213922/http://www.kcefm.de/imperia/md/content/kcefm/kcefmvrr/2010_02_12_kompendiumvrrfa2dvdv_1_4.pdf"""
@@ -249,15 +249,15 @@ class OT_0080BL(DataBlock):
             '036': ('Ziel-Bf-ID', int),
             '040': ('Anzahl Personen', int),
             '041': ('TBD EFS Anzahl', int),
-                }
+        }
 
         ret = {}
 
         for i in range(res['data_count']):
             assert self.read(1) == b"S"
-            typ = self.read(3)
+            typ = self.read(3).decode('ascii')
             l   = int(self.read(4))
-            dat = self.read(l)
+            dat = self.read(l).decode('utf8')
 
             typ, mod = typen.get(typ, (typ,ident))
             dat = mod.get(dat, dat) if type(mod) == dict else mod(dat)
