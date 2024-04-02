@@ -9,6 +9,7 @@ import datetime
 import os
 import re
 import struct
+import sys
 import zlib
 
 try: # pip install pycryptodome
@@ -528,7 +529,6 @@ def fix_zxing(data):
     return data
 
 if __name__ == '__main__':
-  import sys
   if len(sys.argv) < 2:
       print('Usage: %s [ticket_files]' % sys.argv[0])
   ots = {}
