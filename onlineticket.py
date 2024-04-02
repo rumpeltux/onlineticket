@@ -460,7 +460,11 @@ class OT(DataBlock):
       '''Parses the asn1 signature and extracts the (r,s) tuple.'''
       if not asn1: return None
       signature_length = 50 if int(res['version']) <= 1 else 64
-      decoded = asn1.decode(self.read(signature_length))[0]
+      signature_bytes = self.read(signature_length)
+      try:
+        decoded = asn1.decode(signature_bytes)[0]
+      except Exception as e:
+         return (repr(e), signature_bytes)
       return (int(decoded[0]), int(decoded[1]))
 
     def signature_validity(self, res):
@@ -468,7 +472,8 @@ class OT(DataBlock):
           return 'INVALID (trailing data)'
       if len(self.stream) - self.offset - res['data_length'] < 0:
           return 'INVALID (incomplete ticket data)'
-
+      if type(res['signature'][0]) != int:
+         return 'INVALID (asn1 decode error)'
       try:
           pubkey = get_pubkey(issuer=res['carrier'],
                               keyid=res['key_id'])
