@@ -8,7 +8,6 @@ import logging
 import os
 import re
 import struct
-import sys
 import zlib
 
 import logging
@@ -26,13 +25,13 @@ except:
         logger.error('Please remove the deprecated python3-crypto package and install python3-pycryptodome instead.')
         exit(1)
     except:
-        logging.warning('signature verification is disabled due to missing pycryptodome package.')
+        logger.warning('signature verification is disabled due to missing pycryptodome package.')
     SHA1, DSA, DSS, Integer = None, None, None, None
 
 try: # pip install pyasn1
     import pyasn1.codec.der.decoder as asn1
 except:
-    logging.info('signature verification is disabled due to missing pyasn1 package.')
+    logger.info('signature verification is disabled due to missing pyasn1 package.')
     asn1 = None
 
 #utils
@@ -48,7 +47,7 @@ uint32 = lambda x: x[3] | x[2] << 8 | x[1] << 16 | x[0] << 24
 
 
 def debug(tag: str, arg, *extra):
-    logging.debug(repr((tag, arg, *extra)))
+    logger.debug(repr((tag, arg, *extra)))
     return arg
 
 date_parser = lambda x: datetime.datetime.strptime(debug('date', x).decode('ascii'), "%d%m%Y")
@@ -109,7 +108,7 @@ class DataBlock(object):
                   try:
                     dat = val[2](dat)
                   except Exception as e:
-                    logging.warning('Couldn\'t decode (%s, %s, %s):\n%s',
+                    logger.warning('Couldn\'t decode (%s, %s, %s):\n%s',
                                   val, repr(dat), self.__class__, dict_str(res))
                     raise
             res[key] = dat
@@ -160,7 +159,7 @@ class OT_0080VU(DataBlock):
         return uint24(data['data'])
       if data['length'] == 3 + 2:
         return uint16(data['data'])
-    logging.warning('Unexpected station data:\n' + dict_str(data))
+    logger.warning('Unexpected station data:\n' + dict_str(data))
     return data
 
   def read_efs(self, res):
@@ -408,7 +407,7 @@ class OT_RAWJSN(DataBlock):
               with_spaces = re.sub(r'([,{][^}:]+?):([{[0-9\'"])', r'\1: \2', json_data)
               self.data.update(yaml.load(with_spaces))
             except:
-              logging.warning('Couldn\'t decode JSON data', repr(json_data))
+              logger.warning('Couldn\'t decode JSON data', repr(json_data))
               raise
 
 
@@ -533,15 +532,21 @@ def fix_zxing(data):
 
 if __name__ == '__main__':
   import argparse
+  import sys
+
   parser = argparse.ArgumentParser()
   parser.add_argument('ticket_files', nargs='+')
   parser.add_argument('-d', '--debug', help='Enable debug logging', action="store_true")
+  parser.add_argument('-q', '--quiet', help='Less verbose logging', action='store_true')
   parser.add_argument('-z', '--zxing', help='Enable zxing preprocessing.', action="store_true")
   args = parser.parse_args()
 
-  logger.setLevel(logging.INFO)
-  if args.debug:
-     logger.setLevel(logging.DEBUG)
+  if args.quiet:
+    logger.setLevel(logging.ERROR)
+  elif args.debug:
+    logger.setLevel(logging.DEBUG)
+  else:
+    logger.setLevel(logging.INFO)
 
   ots = {}
   for ticket in args.ticket_files:
@@ -551,7 +556,7 @@ if __name__ == '__main__':
       content = open(ticket, 'rb').read()
       tickets = [content]
     for line_no, binary_ticket in enumerate(tickets):
-      logging.info(f'File: {ticket}\tLine: {line_no + 1}')
+      logger.info(f'File: {ticket}\tLine: {line_no + 1}')
       ot = None
       try:
         if args.zxing:
