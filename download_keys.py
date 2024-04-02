@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+"""Lädt öffentliche Schlüssel zur Signaturprüfung herunter."""
 import csv
 import itertools
 import xml.etree.ElementTree as ET
