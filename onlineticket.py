@@ -536,9 +536,11 @@ if __name__ == '__main__':
 
   parser = argparse.ArgumentParser()
   parser.add_argument('ticket_files', nargs='+')
-  parser.add_argument('-d', '--debug', help='Enable debug logging', action="store_true")
+  parser.add_argument('-a', '--auto-zxing', action='store_true',
+                      help='Automatically detect whether zxing preprocessing is required.')
+  parser.add_argument('-d', '--debug', help='Enable debug logging', action='store_true')
   parser.add_argument('-q', '--quiet', help='Less verbose logging', action='store_true')
-  parser.add_argument('-z', '--zxing', help='Enable zxing preprocessing.', action="store_true")
+  parser.add_argument('-z', '--zxing', help='Enable zxing preprocessing.', action='store_true')
   args = parser.parse_args()
 
   if args.quiet:
@@ -563,7 +565,7 @@ if __name__ == '__main__':
            binary_ticket = fix_zxing(binary_ticket)
         ot = OT(binary_ticket)
       except Exception as e:
-        if not args.zxing:
+        if not args.zxing or args.auto_zxing:
           try:
             fixed = fix_zxing(binary_ticket)
             ot = OT(fixed)
@@ -571,9 +573,12 @@ if __name__ == '__main__':
             sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
                 (repr(ot), repr(fixed), ticket, e, f))
             raise
-          print('\nERROR: The ticket could not be parsed, but succeeded with zxing '
-                'preprocessing. Please rerun the script with the --zxing flag.\n')
-        raise
+          if not args.auto_zxing:
+            print('\nERROR: The ticket could not be parsed, but succeeded with zxing '
+                  'preprocessing. Rerun the script with the --zxing (or --auto-zxing) flag.\n', file=sys.stderr)
+        if not ot or not args.auto_zxing:
+          raise
+        
       print(ot)
       ots.setdefault(ticket, []).append(ot)
 
