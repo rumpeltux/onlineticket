@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
 
