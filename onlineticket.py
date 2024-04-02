@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 try: # pip install pycryptodome
     from Cryptodome.Hash import SHA1
+    from Cryptodome.Hash import SHA224
+    from Cryptodome.Hash import SHA256
     from Cryptodome.PublicKey import DSA
     from Cryptodome.Signature import DSS
     from Cryptodome.Math.Numbers import Integer
@@ -26,7 +28,7 @@ except:
         exit(1)
     except:
         logger.warning('signature verification is disabled due to missing pycryptodome package.')
-    SHA1, DSA, DSS, Integer = None, None, None, None
+    SHA1, SHA224, SHA256, DSA, DSS, Integer = None, None, None, None, None, None
 
 try: # pip install pyasn1
     import pyasn1.codec.der.decoder as asn1
@@ -433,7 +435,7 @@ def get_pubkey(issuer, keyid):
 
 get_pubkey.certs = None
 
-def verifysig(message, signature, pubkey):
+def verifysig(message, version, signature, pubkey):
     if DSS is None or asn1 is None:  # pycryptodome package is missing
         raise SignatureVerificationError('Signature verification disabled')
     if not signature:
@@ -441,11 +443,20 @@ def verifysig(message, signature, pubkey):
 
     r, s = signature
 
-    rbytes = Integer(r).to_bytes()
-    sbytes = Integer(s).to_bytes()
+    if version <= 1:
+      rbytes = int.to_bytes(r, 20, byteorder='big')
+      sbytes = int.to_bytes(s, 20, byteorder='big')
+      h = SHA1.new(message)
+    else:
+      rbytes = int.to_bytes(r, 32, byteorder='little')
+      sbytes = int.to_bytes(s, 32, byteorder='little')
+      # TODO: According to this document, the payload can be SHA224 or SHA256. So do we really need to verify the signature twice?!
+      #       https://www.kcd-nrw.de/fileadmin/user_upload/01_Ergebnisdokument_Deutschlandticket_UIC__V1.02.pdf
+      #       Hardcoded to SHA256 for now, because the October 2023 and December 2023 Deutsche Bahn tickets all have SHA256
+      #h = SHA224.new(message)
+      h = SHA256.new(message)
 
     verifykey = DSA.import_key(pubkey)
-    h = SHA1.new(message)
     verifier = DSS.new(verifykey, 'fips-186-3')
 
     try:
@@ -456,15 +467,27 @@ def verifysig(message, signature, pubkey):
 
 class OT(DataBlock):
     def signature_decode(self, res):
-      '''Parses the asn1 signature and extracts the (r,s) tuple.'''
-      if not asn1: return None
-      signature_length = 50 if int(res['version']) <= 1 else 64
-      signature_bytes = self.read(signature_length)
-      try:
-        decoded = asn1.decode(signature_bytes)[0]
-      except Exception as e:
-         return (repr(e), signature_bytes)
-      return (int(decoded[0]), int(decoded[1]))
+      '''Extracts the signature (r,s) tuple.'''
+      if int(res['version']) <= 1:
+        # UIC 1.0: (r,s) are stored in an ASN 1.0 structure
+        # TODO: Is this code correct? How can we know that the ASN.1 structure will be exactly 50 bytes, if (r,s) can have different lengths?
+        if not asn1: return None
+        signature_length = 50
+        signature_bytes = self.read(signature_length)
+        try:
+          decoded = asn1.decode(signature_bytes)[0]
+        except Exception as e:
+           return (repr(e), signature_bytes)
+        return (int(decoded[0]), int(decoded[1]))
+      else:
+        # "Die Werte bei Version 2 müssen zwingend 32 Byte groß sein und nötigenfalls mit vorangestellten Nullbytes aufgefüllt werden."
+        signature_length = 32
+        decoded = [0, 0]
+        decoded[0] = self.read(signature_length)
+        decoded[0] = int.from_bytes(decoded[0], byteorder='little', signed=False)
+        decoded[1] = self.read(signature_length)
+        decoded[1] = int.from_bytes(decoded[1], byteorder='little', signed=False)
+        return (int(decoded[0]), int(decoded[1]))
 
     def signature_validity(self, res):
       if len(self.stream) - self.offset - res['data_length'] > 0:
@@ -476,7 +499,7 @@ class OT(DataBlock):
       try:
           pubkey = get_pubkey(issuer=res['carrier'],
                               keyid=res['key_id'])
-          result = verifysig(self.stream[self.offset:], res['signature'], pubkey)
+          result = verifysig(self.stream[self.offset:], int(res['version']), res['signature'], pubkey)
       except SignatureVerificationError as e:
           return str(e)
 
@@ -499,6 +522,7 @@ class OT(DataBlock):
 
 
 def read_block(data, offset):
+    # TODO: Decode UIC 2.0 U_FLEX (encoded in ASN.1 UPER)
     block_types = {b'U_HEAD': OT_U_HEAD,
                    b'U_TLAY': OT_U_TLAY,
                    b'0080ID': OT_0080ID,
@@ -587,4 +611,3 @@ if __name__ == '__main__':
   #tickets = reduce(list.__add__, ots.values())
   #tickets.sort(lambda a, b: cmp(a.data['ticket'][0].data['creation_date'], b.data['ticket'][0].data['creation_date']))
   #print(list_str(tickets))
-
