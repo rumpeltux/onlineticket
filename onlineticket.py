@@ -4,11 +4,16 @@
 
 import csv
 import datetime
+import logging
 import os
 import re
 import struct
 import sys
 import zlib
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 try: # pip install pycryptodome
     from Cryptodome.Hash import SHA1
@@ -18,19 +23,16 @@ try: # pip install pycryptodome
 except:
     try:
         from Crypto.Hash import SHA
-        print('Please remove the deprecated python3-crypto package and install python3-pycryptodome instead.',
-              file=sys.stderr)
+        logger.error('Please remove the deprecated python3-crypto package and install python3-pycryptodome instead.')
         exit(1)
     except:
-        print('Note: signature verification is disabled due to missing pycryptodome package.',
-              file=sys.stderr)
+        logging.warning('signature verification is disabled due to missing pycryptodome package.')
     SHA1, DSA, DSS, Integer = None, None, None, None
 
 try: # pip install pyasn1
     import pyasn1.codec.der.decoder as asn1
 except:
-    print('Note: signature verification is disabled due to missing pyasn1 package.',
-              file=sys.stderr)
+    logging.info('signature verification is disabled due to missing pyasn1 package.')
     asn1 = None
 
 #utils
@@ -45,9 +47,8 @@ uint24 = lambda x: x[2] | x[1] << 8 | x[0] << 16
 uint32 = lambda x: x[3] | x[2] << 8 | x[1] << 16 | x[0] << 24
 
 
-DEBUG = 0
-def debug(tag, arg, *extra):
-    if DEBUG: print(tag, arg, *extra, "\n")
+def debug(tag: str, arg, *extra):
+    logging.debug(repr((tag, arg, *extra)))
     return arg
 
 date_parser = lambda x: datetime.datetime.strptime(debug('date', x).decode('ascii'), "%d%m%Y")
@@ -108,8 +109,8 @@ class DataBlock(object):
                   try:
                     dat = val[2](dat)
                   except Exception as e:
-                    print('Couldn\'t decode', val, repr(dat), self.__class__)
-                    print(dict_str(res))
+                    logging.warning('Couldn\'t decode (%s, %s, %s):\n%s',
+                                  val, repr(dat), self.__class__, dict_str(res))
                     raise
             res[key] = dat
             if len(val) > 3:
@@ -159,8 +160,7 @@ class OT_0080VU(DataBlock):
         return uint24(data['data'])
       if data['length'] == 3 + 2:
         return uint16(data['data'])
-    print('WARNING: Unexpected station data:')
-    print(dict_str(data))
+    logging.warning('Unexpected station data:\n' + dict_str(data))
     return data
 
   def read_efs(self, res):
@@ -408,7 +408,7 @@ class OT_RAWJSN(DataBlock):
               with_spaces = re.sub(r'([,{][^}:]+?):([{[0-9\'"])', r'\1: \2', json_data)
               self.data.update(yaml.load(with_spaces))
             except:
-              print('Couldn\'t decode JSON data', repr(json_data))
+              logging.warning('Couldn\'t decode JSON data', repr(json_data))
               raise
 
 
@@ -532,27 +532,43 @@ def fix_zxing(data):
     return data
 
 if __name__ == '__main__':
-  if len(sys.argv) < 2:
-      print('Usage: %s [ticket_files]' % sys.argv[0])
+  import argparse
+  parser = argparse.ArgumentParser()
+  parser.add_argument('ticket_files', nargs='+')
+  parser.add_argument('-d', '--debug', help='Enable debug logging', action="store_true")
+  parser.add_argument('-z', '--zxing', help='Enable zxing preprocessing.', action="store_true")
+  args = parser.parse_args()
+
+  logger.setLevel(logging.INFO)
+  if args.debug:
+     logger.setLevel(logging.DEBUG)
+
   ots = {}
-  for ticket in sys.argv[1:]:
+  for ticket in args.ticket_files:
     try:
       tickets = [bytes.fromhex(line) for line in open(ticket)]
     except:
       content = open(ticket, 'rb').read()
       tickets = [content]
-    for binary_ticket in tickets:
+    for line_no, binary_ticket in enumerate(tickets):
+      logging.info(f'File: {ticket}\tLine: {line_no + 1}')
       ot = None
       try:
+        if args.zxing:
+           binary_ticket = fix_zxing(binary_ticket)
         ot = OT(binary_ticket)
       except Exception as e:
-        try:
-          fixed = fix_zxing(binary_ticket)
-          ot = OT(fixed)
-        except Exception as f:
-          sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
-              (repr(ot), repr(fixed), ticket, e, f))
-          raise
+        if not args.zxing:
+          try:
+            fixed = fix_zxing(binary_ticket)
+            ot = OT(fixed)
+          except Exception as f:
+            sys.stderr.write('ORIGINAL: %s\nZXING: %s\n%s: Error: %s (orig); %s (zxing)\n' %
+                (repr(ot), repr(fixed), ticket, e, f))
+            raise
+          print('\nERROR: The ticket could not be parsed, but succeeded with zxing '
+                'preprocessing. Please rerun the script with the --zxing flag.\n')
+        raise
       print(ot)
       ots.setdefault(ticket, []).append(ot)
 
