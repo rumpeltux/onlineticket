@@ -470,7 +470,7 @@ class OT(DataBlock):
       '''Extracts the signature (r,s) tuple.'''
       if int(res['version']) <= 1:
         # UIC 1.0: (r,s) are stored in an ASN 1.0 structure
-        # TODO: Is this code correct? How can we know that the ASN.1 structure will be exactly 50 bytes, if (r,s) can have different lengths?
+        # TODO: Is this code correct? How can we know that the ASN.1 structure will be exactly 50 bytes, if (r,s) can have different lengths? Or is somewhere specified that there is a badding after the ASN.1 structure?
         if not asn1: return None
         signature_length = 50
         signature_bytes = self.read(signature_length)
@@ -522,7 +522,7 @@ class OT(DataBlock):
 
 
 def read_block(data, offset):
-    # TODO: Decode UIC 2.0 U_FLEX (encoded in ASN.1 UPER)
+    # TODO: Decode UIC 2.0 U_FLEX (encoded in ASN.1 UPER). Example implementation: https://github.com/karlheinzkurt/ticket-decoder/blob/master/source/lib/uic918/detail/source/RecordU_FLEX.cpp
     block_types = {b'U_HEAD': OT_U_HEAD,
                    b'U_TLAY': OT_U_TLAY,
                    b'0080ID': OT_0080ID,
