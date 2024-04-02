@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
-# Copyright by Hagen Fritsch, 2009-2017
 
 import base64
 import csv
