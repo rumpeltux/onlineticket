@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 # Parser für Online-Tickets der Deutschen Bahn nach ETF-918.3
 
-import base64
 import csv
 import datetime
 import os
