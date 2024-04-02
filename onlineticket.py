@@ -505,7 +505,6 @@ def read_block(data, offset):
     block_type = debug('block_type', data[offset:offset+6], repr(data[offset:]))
     return block_types.get(block_type, GenericBlock)(data, offset)
 
-readot = lambda x: ''.join([chr(int(i,16)) for i in x.strip().split(" ")])
 
 def read_blocks(data, read_func):
     offset = 0
@@ -533,11 +532,12 @@ if __name__ == '__main__':
   ots = {}
   for ticket in sys.argv[1:]:
     try:
-      tickets = [readot(i) for i in open(ticket)]
+      tickets = [bytes.fromhex(line) for line in open(ticket)]
     except:
       content = open(ticket, 'rb').read()
       tickets = [content]
     for binary_ticket in tickets:
+      ot = None
       try:
         ot = OT(binary_ticket)
       except Exception as e:
