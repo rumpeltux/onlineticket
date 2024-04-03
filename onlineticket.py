@@ -472,7 +472,7 @@ class OT(DataBlock):
       '''Extracts the signature (r,s) tuple.'''
       if int(res['version']) <= 1:
         # UIC 1.0: (r,s) are stored in an ASN 1.0 structure
-        # TODO: Is this code correct? How can we know that the ASN.1 structure will be exactly 50 bytes, if (r,s) can have different lengths? Or is somewhere specified that there is a badding after the ASN.1 structure?
+        # TODO: Is this code correct? How can we know that the ASN.1 structure will be exactly 50 bytes, if (r,s) can have different lengths? Or is somewhere specified that there is a padding after the ASN.1 structure?
         if not asn1: return None
         signature_length = 50
         signature_bytes = self.read(signature_length)
