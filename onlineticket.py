@@ -521,7 +521,7 @@ class OT(DataBlock):
 
 
 def read_block(data, offset):
-    # TODO: Decode UIC 2.0 U_FLEX (encoded in ASN.1 UPER). Example implementation: https://github.com/karlheinzkurt/ticket-decoder/blob/master/source/lib/uic918/detail/source/RecordU_FLEX.cpp
+    # TODO: Decode UIC 2.0 U_FLEX (encoded in ASN.1 U-PER). ASN.1 Definitions here: https://github.com/UnionInternationalCheminsdeFer/UIC-barcode/blob/master/misc/uicRailTicketData_v1.3.4.asn
     block_types = {b'U_HEAD': OT_U_HEAD,
                    b'U_TLAY': OT_U_TLAY,
                    b'0080ID': OT_0080ID,
