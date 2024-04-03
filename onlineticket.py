@@ -33,7 +33,7 @@ except:
 try: # pip install pyasn1
     import pyasn1.codec.der.decoder as asn1
 except:
-    logger.info('signature verification is disabled due to missing pyasn1 package.')
+    logger.info('UIC 1.0 signature verification is disabled due to missing pyasn1 package.')
     asn1 = None
 
 #utils
@@ -436,14 +436,16 @@ def get_pubkey(issuer, keyid):
 get_pubkey.certs = None
 
 def verifysig(message, version, signature, pubkey):
-    if DSS is None or asn1 is None:  # pycryptodome package is missing
-        raise SignatureVerificationError('Signature verification disabled')
+    if DSS is None:
+      raise SignatureVerificationError('Signature verification disabled (pycryptodome package is missing)')
     if not signature:
-      raise SignatureVerificationError('Signature asn1 parsing error.')
+      raise SignatureVerificationError('Signature parsing error.')
 
     r, s = signature
 
     if version <= 1:
+      if asn1 is None:
+        raise SignatureVerificationError('Signature verification disabled (pyasn1 package is missing)')
       rbytes = int.to_bytes(r, 20, byteorder='big')
       sbytes = int.to_bytes(s, 20, byteorder='big')
       h = SHA1.new(message)
@@ -601,7 +603,7 @@ if __name__ == '__main__':
                   'preprocessing. Rerun the script with the --zxing (or --auto-zxing) flag.\n', file=sys.stderr)
         if not ot or not args.auto_zxing:
           raise
-        
+
       print(ot)
       ots.setdefault(ticket, []).append(ot)
 
